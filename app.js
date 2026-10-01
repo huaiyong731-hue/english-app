@@ -22,7 +22,7 @@ const STAGES = [
   {key:'3', name:'基礎單字', icon:'🍎', desc:'約 300 個最常用的單字，每課只學 5 個'},
   {key:'p', name:'句型套用', icon:'🔁', desc:'21 個萬用句型：換一個字，就是一句新句子'},
   {key:'4', name:'常用句子', icon:'💬', desc:'150 句生活會話，每課 3–4 句'},
-  {key:'5', name:'基礎文法', icon:'🧩', desc:'中英對比＋中文母語者常犯的錯，用最簡單的中文說明'},
+  {key:'5', name:'基礎文法', icon:'🧩', desc:'中英對比＋容易搞混的地方，用最簡單的中文說明'},
   {key:'6', name:'簡單對話', icon:'👫', desc:'15 段生活對話，一次聽完整段'}
 ];
 const SI = k => STAGES.findIndex(s => s.key===k);
@@ -85,7 +85,7 @@ const byId = id => LESSONS.find(l => l.id===id);
 
 /* ---------- 進度儲存 ---------- */
 const KEY='eng-zero-v1';
-const DEF = {done:{}, cards:{}, days:{}, streak:0, lastDay:'', reviewDay:'', ck:{last:'', streak:0, days:{}}, ckTask:null, s:{rate:0.8, voice:'', hint:true, hm:'py', auto:true}};
+const DEF = {done:{}, cards:{}, days:{}, streak:0, lastDay:'', reviewDay:'', ck:{last:'', streak:0, days:{}}, ckTask:null, s:{rate:0.8, voice:'', hint:true, hm:'py', auto:true, trate:0.75, tauto:true}};
 let P;
 try { P = Object.assign({}, DEF, JSON.parse(localStorage.getItem(KEY)||'{}')); P.s = Object.assign({}, DEF.s, P.s||{}); P.ck = Object.assign({last:'', streak:0, days:{}}, P.ck||{}); } catch(e){ P = JSON.parse(JSON.stringify(DEF)); }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(P)); }catch(e){} }
@@ -105,9 +105,11 @@ const todayMin = () => Math.floor((P.days[dayStr()]||0)/60);
 
 /* ---------- 語音 ---------- */
 const synth = window.speechSynthesis;
-let voices=[], curUtt=null;
+let voices=[], zhVoices=[], curUtt=null;
 const BAD = /Albert|Bad News|Bahh|Bells|Boing|Bubbles|Cellos|Good News|Jester|Organ|Superstar|Trinoids|Whisper|Wobble|Zarvox|Fred|Junior|Ralph|Grandma|Grandpa|Rocko|Shelley|Eddy|Flo|Reed|Sandy/i;
-function loadVoices(){ if(!synth) return; voices = synth.getVoices().filter(v => /^en[-_]/i.test(v.lang) || v.lang==='en'); }
+function loadVoices(){ if(!synth) return; const all=synth.getVoices(); voices = all.filter(v => /^en[-_]/i.test(v.lang) || v.lang==='en');
+  zhVoices = all.filter(v => /^(zh|cmn)/i.test(v.lang)).sort((a,b)=>zs(b)-zs(a)); }
+function zs(v){ let s=0; if(/TW|Hant/i.test(v.lang)) s+=50; else if(/CN|Hans/i.test(v.lang)) s+=30; else if(/HK|yue/i.test(v.lang)) s-=20; if(/Mei-Jia|Meijia|Google|Natural|Enhanced|Premium|HsiaoChen|Yating|Hanhan/i.test(v.name)) s+=15; return s; }
 if(synth){ loadVoices(); if('onvoiceschanged' in synth) synth.onvoiceschanged = () => { loadVoices(); if(route().v==='settings') render(); }; }
 function scoreVoice(v){ let s=0; if(/en[-_]US/i.test(v.lang)) s+=50; else if(/en[-_](GB|AU|CA|IE)/i.test(v.lang)) s+=20;
   if(/Samantha|Ava|Allison|Susan|Zoe|Nicky|Joelle|Evan|Nathan|Tom/i.test(v.name)) s+=30; if(/Google US English|Aria|Jenny|Guy|Natural/i.test(v.name)) s+=35;
@@ -118,7 +120,22 @@ function speak(text, o){ o=o||{}; if(!synth){ toast('這台裝置不支援語音
   const go = () => { const u=new SpeechSynthesisUtterance(text); u.lang='en-US'; const v=o.voice||mainVoice(); if(v){u.voice=v; u.lang=v.lang;} u.rate=o.rate||P.s.rate; u.pitch=o.pitch||1;
     u.onend = () => { o.onend && o.onend(); }; u.onerror = () => { o.onend && o.onend(); }; curUtt=u; synth.speak(u); };
   if(synth.speaking || synth.pending){ synth.cancel(); setTimeout(go, 80); } else go(); }
-function stopSpeak(){ if(synth) synth.cancel(); }
+function stopSpeak(){ TQ++; if(synth) synth.cancel(); }
+/* 老師說話：中文用中文聲音、英文用英文聲音，慢慢說 */
+let TQ=0;
+function speakT(text, slow, onend){ if(!synth){ onend&&onend(); return; } const my=++TQ; const rate=slow?Math.max(0.5,P.s.trate-0.2):P.s.trate;
+  const clean=String(text).replace(/[\u{1F000}-\u{1FFFF}\u2600-\u27BF\uFE0F\u200D→←＋]/gu,' ');
+  const segs=clean.split(/([A-Za-z][A-Za-z'’\- ,.?!]*[A-Za-z.?!]|[A-Za-z])/).map(x=>x.trim()).filter(x=>x && /[A-Za-z\u4e00-\u9fff]/.test(x));
+  let i=0; const zv=zhVoices[0];
+  const next=()=>{ if(my!==TQ) return; if(i>=segs.length){ onend&&onend(); return; } const t=segs[i++]; const en=/^[A-Za-z]/.test(t);
+    const u=new SpeechSynthesisUtterance(t); if(en){ const v=mainVoice(); if(v){u.voice=v;} u.lang=v?v.lang:'en-US'; u.rate=Math.min(rate, P.s.rate); } else { if(zv){u.voice=zv; u.lang=zv.lang;} else u.lang='zh-TW'; u.rate=rate; }
+    u.onend=()=>setTimeout(next,150); u.onerror=()=>setTimeout(next,50); curUtt=u; synth.speak(u); };
+  if(synth.speaking||synth.pending){ synth.cancel(); setTimeout(next,80); } else next(); }
+function tbub(text, cls){ return '<div class="tbub '+(cls||'')+'"><div class="tav">👩‍🏫</div><div class="tb"><div class="tt">'+esc(text)+'</div><div class="tbtn"><button data-tsay="'+esc(text)+'">🔁 再講一次</button><button data-tsay="'+esc(text)+'" data-tslow="1">🐢 講慢一點</button></div></div></div>'; }
+function autoT(lines){ if(!P.s.tauto) return; let i=0; const go=()=>{ if(i<lines.length) speakT(lines[i++], false, ()=>setTimeout(go,300)); }; setTimeout(go,250); }
+const RECAP = L => { const ord=learnOrder(); const i=ord.indexOf(L); const pv=i>0?ord[i-1]:null; if(!pv) return '第一課！我們慢慢開始 😊'; let t=pv.title; if(t.length>12) t=t.slice(0,12)+'…'; return '上一課學了「'+t+'」👍'; };
+const PRAISE = ['你好棒！今天又進步了 🌟','老師好開心，你做完了！🎉','慢慢學，你一直在進步 🌱','真厲害！給你拍拍手 👏'];
+const LINE_T = ['慢慢看，看懂就好 😊','這個很重要喔 ⭐','跟中文比一比 🀄','不用背，看懂就好 👍'];
 let unlocked=false;
 function unlock(){ if(unlocked||!synth) return; unlocked=true; try{ const u=new SpeechSynthesisUtterance(' '); u.volume=0; synth.speak(u); }catch(e){} loadVoices(); }
 document.addEventListener('touchend', unlock, {passive:true}); document.addEventListener('click', unlock);
@@ -157,9 +174,9 @@ const toPy = h => String(h||'').trim().split(/\s+/).map(t => PYM[t] || t).join('
 function hintHTML(h, label){ if(!h || P.s.hm==='off') return ''; const py=toPy(h), m=P.s.hm;
   let o=''; if(m==='py'||m==='both') o+='<div class="hint py">'+(label||'拼音')+'：'+esc(py)+'</div>'; if(m==='xy'||m==='both') o+='<div class="hint">'+(label?label+'（諧音）':'諧音')+'：'+esc(h)+'</div>'; return o; }
 function pyBox(o){ if(!o || !o.py) return ''; return '<div class="card pybox'+(o.nocn?' nocn':'')+'">'+(o.nocn?'<div class="nocn-tag">❗ 中文沒有這個音，要特別練習</div>':'')+
-  '<div><b>🅿️ 拼音對照：</b>'+esc(o.py)+'</div><div><b>👄 嘴型：</b>'+esc(o.mouth)+'</div><div class="warn"><b>⚠️ 常見錯誤：</b>'+esc(o.err)+'</div></div>'; }
+  '<div><b>🅿️ 拼音對照：</b>'+esc(o.py)+'</div><div><b>👄 嘴型：</b>'+esc(o.mouth)+'</div><div class="warn"><b>⚠️ 小心這裡：</b>'+esc(o.err)+'</div></div>'; }
 function speakBtns(text, cls){ return '<div class="sbtns '+(cls||'')+'"><button class="btn sound" data-say="'+esc(text)+'">🔊 聽</button><button class="btn sound slow" data-say="'+esc(text)+'" data-rate="0.55">🐢 慢慢聽</button></div>'; }
-app.addEventListener('click', e => { const b=e.target.closest('[data-say]'); if(b){ e.preventDefault(); speak(b.dataset.say, {rate: b.dataset.rate?parseFloat(b.dataset.rate):undefined}); } });
+app.addEventListener('click', e => { const tb=e.target.closest('[data-tsay]'); if(tb){ e.preventDefault(); speakT(tb.dataset.tsay, !!tb.dataset.tslow); return; } const b=e.target.closest('[data-say]'); if(b){ e.preventDefault(); speak(b.dataset.say, {rate: b.dataset.rate?parseFloat(b.dataset.rate):undefined}); } });
 
 /* ---------- 路由 ---------- */
 function route(){ const h=(location.hash||'#/home').slice(2).split('/'); return {v:h[0]||'home', a:h[1]}; }
@@ -295,7 +312,10 @@ function startLesson(L){
   stopSpeak(); active=true;
   const steps=[{k:'intro'}];
   if(L.kind==='dlg'){ steps.push({k:'dlg'}); }
-  else { if(L.kind==='gram') steps.push({k:'gram'}); if(L.kind==='prin') steps.push({k:'prin'}); if(L.kind==='pat') steps.push({k:'patIntro'}); L.items.forEach(id=>steps.push({k:'learn', id})); if(L.kind==='pat') steps.push({k:'drill'}); }
+  else { if(L.kind==='gram'||L.kind==='prin'){ const T=(L.kind==='gram'?D.teachG:D.teachP)||[]; const t=T[L.n-1];
+      if(t){ steps.push({k:'story', t}); steps.push({k:'pic', t}); steps.push({k:'try', t}); }
+      const lines = L.kind==='gram' ? L.explain.split('\n') : L.explain; lines.forEach((x,j)=>steps.push({k:'line', x, j, of:lines.length}));
+      if(L.kind==='gram'){ if(L.cn.length) steps.push({k:'cn'}); if(L.err.length) steps.push({k:'err'}); } } if(L.kind==='pat') steps.push({k:'patIntro'}); L.items.forEach(id=>steps.push({k:'learn', id})); if(L.kind==='pat') steps.push({k:'drill'}); }
   steps.push({k:'qintro'});
   buildQuiz(L).forEach(q=>steps.push(q));
   steps.push({k:'done'});
@@ -344,19 +364,49 @@ function showStep(){
   const s=R.steps[R.i], L=R.L;
   if(s.k==='intro'){
     const n=L.items.length;
-    frame(`<div class="center intro"><div class="emoji-big">${STAGES[L.stage].icon}</div><p class="small">第 ${L.stage+1} 階段 · 第 ${L.idx+1} 課</p><h1>${esc(L.title)}</h1>
-      <p class="lead">${L.kind==='dlg'?'今天聽一段 '+n+' 句的小對話':'這一課只學 <b>'+n+'</b> 個新東西'}，慢慢來就好 😊</p>
+    const b1=RECAP(L), b2=L.kind==='dlg'?'今天聽一段小對話 👂':'今天只學 '+n+' 個，慢慢來 😊';
+    frame(`<div class="center intro"><p class="small">第 ${L.stage+1} 階段 · 第 ${L.idx+1} 課</p><h1>${STAGES[L.stage].icon} ${esc(L.title)}</h1>
+      ${tbub(b1)}${tbub(b2)}
       ${L.kind==='phon'?'<div class="card rule">📌 '+esc(L.rule)+'</div>'+pyBox(L):''}
       ${L.kind==='pat'?'<div class="card rule">🔁 學會一個句型，換一個字就是新句子！</div>':''}
       ${L.kind==='prin'?'<div class="card rule">🧠 這一課不用背，只要「看懂」英文是怎麼組成的</div>':''}
       <div class="card steps"><div>① 👂 先聽</div><div>② 🗣️ 跟著唸</div><div>③ 🎯 小遊戲</div></div>
       <button class="btn primary huge" id="nx">開始 ▶</button></div>`);
     document.getElementById('nx').onclick = () => { unlock(); nextStep(); };
+    autoT([b1,b2]);
+  }
+  else if(s.k==='story'){ const lines=s.t.s; let shown=1;
+    frame(`<p class="small center">📖 先聽老師講個小故事</p><div id="bubs">${tbub(lines[0])}</div><div class="actions"><button class="btn primary" id="nx">${lines.length>1?'下一句 ▶':'我懂了 ▶'}</button></div>`);
+    autoT([lines[0]]);
+    document.getElementById('nx').onclick=()=>{ if(shown<lines.length){ document.getElementById('bubs').insertAdjacentHTML('beforeend', tbub(lines[shown])); autoT([lines[shown]]); shown++; if(shown>=lines.length) document.getElementById('nx').textContent='我懂了 ▶'; window.scrollTo(0,document.body.scrollHeight); } else nextStep(); };
+  }
+  else if(s.k==='pic'){ const b='看圖記一記 👀';
+    frame(`<p class="small center">🖼️ 看圖片</p>${tbub(b)}<div class="card pic center"><div class="pic-big">${esc(s.t.p[0])}</div><div class="zh big">${esc(s.t.p[1])}</div></div><div class="actions"><button class="btn primary" id="nx">記住了 ▶</button></div>`);
+    autoT([b, s.t.p[1]]); document.getElementById('nx').onclick=nextStep;
+  }
+  else if(s.k==='try'){ const b='換你試試看 ✋'; const o=s.t.t[1].split('|');
+    frame(`<p class="small center">✋ 試試看</p>${tbub(b)}<div class="q"><h2>${esc(s.t.t[0])}</h2><div class="opts">${o.map((x,i)=>`<button class="opt big" data-i="${i}">${esc(x)}</button>`).join('')}</div><div id="fb"></div></div>`);
+    autoT([b]);
+    app.querySelectorAll('.opt').forEach(btn=>btn.onclick=()=>{ const ok=+btn.dataset.i===s.t.t[2]; const fb=document.getElementById('fb');
+      if(ok){ app.querySelectorAll('.opt').forEach(x=>x.disabled=true); btn.classList.add('right'); const m=rnd(D.cheers); fb.innerHTML=tbub(m,'happy')+'<button class="btn primary" id="cont">繼續 ▶</button>'; speakT(m.replace(/[!！]/g,'')); document.getElementById('cont').onclick=nextStep; }
+      else { btn.classList.add('soft-miss'); btn.disabled=true; fb.innerHTML=tbub('差一點點，我們再看一次 😊'); speakT('差一點點，我們再看一次'); } });
+  }
+  else if(s.k==='line'){ const b=LINE_T[s.j%LINE_T.length];
+    frame(`<p class="small center">重點 ${s.j+1} / ${s.of}</p>${tbub(b)}<div class="card explain prin one">${colorize(s.x)}</div>${L.kind==='prin'?legend({explain:[s.x],items:[]}):''}<div class="actions"><button class="btn primary" id="nx">${s.j+1<s.of?'下一個重點 ▶':'懂了 ▶'}</button></div>`);
+    autoT([b]); document.getElementById('nx').onclick=nextStep;
+  }
+  else if(s.k==='cn'){ const b='中文和英文，比一比 🀄';
+    frame(`${tbub(b)}<div class="card cmp"><h3>🀄 中文這樣說 → 🔤 英文要這樣說</h3>${L.cn.map(c=>'<div class="cmp-row"><div class="cz">'+esc(c[0])+'</div><div class="arr">→</div><div class="ce" data-say="'+esc(c[1].replace(/（.*?）/g,''))+'">'+esc(c[1])+' 🔊</div></div>').join('')}</div><div class="actions"><button class="btn primary" id="nx">懂了 ▶</button></div>`);
+    autoT([b]); document.getElementById('nx').onclick=nextStep;
+  }
+  else if(s.k==='err'){ const b='這裡大家常搞混 🤗';
+    frame(`${tbub(b)}<div class="card errbox"><h3>🤗 容易搞混的地方</h3>${L.err.map(e=>'<div class="err-row"><div class="bad">🤔 容易說成：'+esc(e[0])+'</div><div class="good" data-say="'+esc(e[1])+'">😊 要這樣說：'+esc(e[1])+' 🔊</div><small>'+esc(e[2])+'</small></div>').join('')}</div><div class="actions"><button class="btn primary" id="nx">懂了，聽例句 ▶</button></div>`);
+    autoT([b]); document.getElementById('nx').onclick=nextStep;
   }
   else if(s.k==='gram'){
     frame(`<h1>🧩 ${esc(L.title)}</h1><div class="card explain">${esc(L.explain).replace(/\n/g,'<br>')}</div>
       ${L.cn.length?'<div class="card cmp"><h3>🀄 中文這樣說 → 🔤 英文要這樣說</h3>'+L.cn.map(c=>'<div class="cmp-row"><div class="cz">'+esc(c[0])+'</div><div class="arr">→</div><div class="ce" data-say="'+esc(c[1].replace(/（.*?）/g,''))+'">'+esc(c[1])+' 🔊</div></div>').join('')+'</div>':''}
-      ${L.err.length?'<div class="card errbox"><h3>🚧 中文母語者常犯的錯</h3>'+L.err.map(e=>'<div class="err-row"><div class="bad">❌ '+esc(e[0])+'</div><div class="good" data-say="'+esc(e[1])+'">✅ '+esc(e[1])+' 🔊</div><small>'+esc(e[2])+'</small></div>').join('')+'</div>':''}
+      ${L.err.length?'<div class="card errbox"><h3>🤗 容易搞混的地方</h3>'+L.err.map(e=>'<div class="err-row"><div class="bad">❌ '+esc(e[0])+'</div><div class="good" data-say="'+esc(e[1])+'">✅ '+esc(e[1])+' 🔊</div><small>'+esc(e[2])+'</small></div>').join('')+'</div>':''}
       <p class="small">接下來會一句一句聽例句 👂</p><button class="btn primary huge" id="nx">懂了，聽例句 ▶</button>`);
     document.getElementById('nx').onclick = nextStep;
   }
@@ -375,8 +425,8 @@ function showStep(){
   else if(s.k==='dlg'){ showDialogue(L); }
   else if(s.k==='learn'){ showLearn(ITEMS[s.id], L); }
   else if(s.k==='qintro'){
-    frame(`<div class="center intro"><div class="emoji-big">🎯</div><h1>小遊戲時間</h1><p class="lead">不用緊張，錯了也沒關係，<br>錯的會再出現一次幫你記住 🌱</p><button class="btn primary huge" id="nx">來玩 ▶</button></div>`);
-    document.getElementById('nx').onclick = nextStep;
+    frame(`<div class="center intro"><div class="emoji-big">🎯</div><h1>小遊戲時間</h1>${tbub('來玩小遊戲！不會也沒關係 😊')}${tbub('不會的，會再出現一次 🌱')}<button class="btn primary huge" id="nx">來玩 ▶</button></div>`);
+    document.getElementById('nx').onclick = nextStep; autoT(['來玩小遊戲！不會也沒關係']);
   }
   else if(s.k==='q'){ showQ(s); }
   else if(s.k==='done'){ finishLesson(); }
@@ -402,7 +452,7 @@ function showLearn(it, L){
     ${hintHTML(it.hint)}<div class="zh big">${esc(it.zh)}</div>${speakBtns(it.say)}
     ${L.kind==='phon'&&L.py?'<div class="card mini pyline">🅿️ '+esc(L.py)+(L.nocn?' <b class="nocn-mini">❗中文沒有</b>':'')+'<br><small>⚠️ '+esc(L.err)+'</small></div>':''}`;
   }
-  frame(`<p class="small center">新東西 ${num} / ${L.items.length} · ① 先聽 👂 ② 再跟著唸 🗣️</p><div class="learn">${body}</div>
+  frame(`<p class="small center">新東西 ${num} / ${L.items.length}</p>${tbub(num===1?'先聽我唸 👂 再跟著唸 🗣️':rnd(['再聽一個 👂 慢慢來','聽兩次也可以喔 😊','跟著唸，大聲一點 🗣️']),'mini')}<div class="learn">${body}</div>
     <div id="recbox"></div>
     <div class="actions"><button class="btn soft" id="rep">🎤 跟我唸</button><button class="btn primary" id="nx">下一個 ▶</button></div>`);
   document.getElementById('nx').onclick = () => { learnCard(it.id); nextStep(); };
@@ -422,7 +472,7 @@ function setupTrace(it){ const cv=document.getElementById('cv'); const c=cv.getC
   document.getElementById('clr').onclick=bg; }
 function showDialogue(L){
   const its=L.items.map(id=>ITEMS[id]);
-  frame(`<h1>👫 ${esc(L.title)}</h1><p class="small">先按「播放整段」聽一次。點任何一句可以單獨聽。</p>
+  frame(`<h1>👫 ${esc(L.title)}</h1>${tbub('先聽整段，不用全懂 👂')}<p class="small">點任何一句，可以單獨聽。</p>
     <div class="row-c"><button class="btn primary" id="all">▶ 播放整段</button><button class="btn soft" id="allslow">🐢 慢速整段</button></div>
     <div class="dlg">${its.map((it,i)=>`<div class="bubble ${it.spk==='A'?'a':'b'}" data-i="${i}"><div class="who">${it.spk==='A'?'🧑 A':'👩 B'}</div><div class="en-line">${esc(it.en)}</div><div class="zh">${esc(it.zh)}</div></div>`).join('')}</div>
     <div class="actions"><button class="btn primary" id="nx">聽好了 ▶</button></div>`);
@@ -468,7 +518,7 @@ function answer(s, ok, sayText){
   if(ok){ fb.innerHTML='<div class="fb ok">'+rnd(D.cheers)+'</div>'; speak(sayText); if(s.it) gradeLight(s.it.id, true); setTimeout(()=>{ if(R && R.steps[R.i]===s) nextStep(); }, 1300); }
   else {
     if(!R.requeued.has(s)){ R.requeued.add(s); const again=Object.assign({}, s); R.requeued.add(again); R.steps.splice(R.steps.length-1, 0, again); }
-    fb.innerHTML='<div class="fb soft">'+rnd(D.soft)+'</div><button class="btn primary" id="cont">繼續 ▶</button>'; speak(sayText);
+    fb.innerHTML=tbub(rnd(D.soft))+'<div class="fb soft">看一下綠色的答案 👀</div><button class="btn primary" id="cont">繼續 ▶</button>'; speak(sayText);
     document.getElementById('cont').onclick=nextStep; }
 }
 function gradeLight(){ /* 課堂中的答題不改變卡片盒子，只在複習時調整 */ }
@@ -504,7 +554,7 @@ function legend(L){ const all=L.explain.join(' ')+L.items.map(id=>ITEMS[id].mk).
   return '<div class="legend">'+used.map(k=>'<span class="k k-'+k+'">'+names[k]+'</span>').join('')+'</div>'; }
 function showDrill(L){
   const its=L.drillIds.map(id=>ITEMS[id]); const pt=L.pat; const tried=new Set();
-  frame(`<h1>✨ 換字造句</h1><p class="small center">點下面的字，放進空格，變成新句子（至少試 3 個）</p>
+  frame(`<h1>✨ 換字造句</h1>${tbub('換一個字，就是新句子 ✨')}<p class="small center">點下面的字放進空格（至少試 3 個）</p>
    <div class="card pat-frame" id="pf"><div class="en-sent" id="pen">${esc(pt.p).replace('___','<span class="slot">＿＿</span>')}</div><div class="zh big" id="pzh">${esc(pt.z).replace('___','<span class="slot">＿＿</span>')}</div><div id="phint"></div>
    <button class="btn sound" id="psay" disabled>🔊 再聽一次</button></div>
    <div class="fillers">${its.map((it,i)=>`<button class="filler" data-i="${i}"><span>${it.emoji}</span>${esc(it.fill)}<small>${esc(it.fillZh)}</small></button>`).join('')}</div>
@@ -550,7 +600,7 @@ function finishLesson(){
   const L=R.L; const acc=R.total?R.right/R.total:1; const stars=acc>=0.9?3:acc>=0.6?2:1;
   P.done[L.id]=Math.max(P.done[L.id]||0, stars); L.items.forEach(learnCard); markStudy(); save();
   const nl=nextLesson();
-  frame(`<div class="center intro"><div class="emoji-big bounce">🎉</div><h1>完成了！</h1><div class="stars">${'⭐'.repeat(stars)}</div>
+  frame(`<div class="center intro"><div class="emoji-big bounce">🎉</div><h1>完成了！</h1><div class="stars">${'⭐'.repeat(stars)}</div>${tbub(rnd(PRAISE),'happy')}
     <p class="lead">${rnd(D.cheers)}<br>你學會了 ${L.items.length} 個新東西。</p>
     <p class="small">${todayMin()>=20?'今天已經學了 '+todayMin()+' 分鐘，非常棒！想休息就休息吧 😊':'今天已學 '+todayMin()+' 分鐘，目標 20 分鐘'}</p>
     ${nl?'<button class="btn primary huge" id="nxl">▶ 下一課：'+esc(nl.title)+'</button>':''}
@@ -619,7 +669,11 @@ function viewPlan(){
 function viewSettings(){
   const vs=voices.filter(v=>!BAD.test(v.name)); const mv=mainVoice();
   page('settings', `<h1>⚙️ 設定</h1>
-  <div class="card"><b>🔊 說話速度</b><div class="seg">${[[0.6,'很慢 🐢'],[0.8,'慢（建議）'],[1,'正常']].map(r=>`<button class="${P.s.rate===r[0]?'on':''}" data-rate-set="${r[0]}">${r[1]}</button>`).join('')}</div>
+  <div class="card"><b>👩‍🏫 老師說話速度（中文）</b><div class="seg">${[[0.6,'很慢 🐢'],[0.75,'慢（建議）'],[0.95,'正常']].map(r=>`<button class="${P.s.trate===r[0]?'on':''}" data-trate-set="${r[0]}">${r[1]}</button>`).join('')}</div>
+  <label class="sw"><input type="checkbox" id="tauto" ${P.s.tauto?'checked':''}> 老師自動說話</label>
+  <button class="btn sound" data-tsay="你好！我們慢慢學，不用急 😊">🔊 聽老師說話</button>
+  <small>${zhVoices.length?'中文聲音：'+esc(zhVoices[0].name):'找不到中文聲音，老師只會用文字說話。'}</small></div>
+  <div class="card"><b>🔊 英文說話速度</b><div class="seg">${[[0.6,'很慢 🐢'],[0.8,'慢（建議）'],[1,'正常']].map(r=>`<button class="${P.s.rate===r[0]?'on':''}" data-rate-set="${r[0]}">${r[1]}</button>`).join('')}</div>
   <b>🗣️ 英文聲音</b><select id="voice"><option value="">自動選擇（${mv?esc(mv.name):'預設'}）</option>${vs.map(v=>`<option value="${esc(v.voiceURI)}" ${P.s.voice===v.voiceURI?'selected':''}>${esc(v.name)} (${esc(v.lang)})</option>`).join('')}</select>
   <button class="btn sound" data-say="Hello! Nice to meet you. Let's learn English together.">🔊 試聽</button>
   <small>${vs.length?'找到 '+vs.length+' 個英文聲音。':'聲音載入中或裝置沒有英文聲音。'}iPhone 可到「設定 → 輔助使用 → 朗讀內容 → 聲音 → 英文」下載「Samantha（增強版）」等更自然的聲音。</small></div>
@@ -630,6 +684,8 @@ function viewSettings(){
   <div class="card"><b>📲 加到 iPhone 主畫面</b><ol class="plan-list"><li>用 Safari 打開這個網頁</li><li>按下方的「分享」按鈕 <span class="ios">⬆️</span></li><li>選「加入主畫面」</li><li>之後從主畫面的圖示打開，就像 App 一樣，沒有網路也能用</li></ol></div>
   <div class="card"><b>📊 我的進度</b><p class="small">完成 ${Object.keys(P.done).length} / ${LESSONS.length} 課，卡片 ${Object.keys(P.cards).length} 張，連續 ${P.streak||0} 天。進度存在這台手機的瀏覽器裡。</p>
   <button class="btn danger" id="reset">清除所有進度</button></div>`);
+  app.querySelectorAll('[data-trate-set]').forEach(b=>b.onclick=()=>{ P.s.trate=parseFloat(b.dataset.trateSet); save(); viewSettings(); speakT('這樣的速度可以嗎？'); });
+  document.getElementById('tauto').onchange=e=>{ P.s.tauto=e.target.checked; save(); };
   app.querySelectorAll('[data-rate-set]').forEach(b=>b.onclick=()=>{ P.s.rate=parseFloat(b.dataset.rateSet); save(); viewSettings(); speak('Hello!'); });
   document.getElementById('voice').onchange=e=>{ P.s.voice=e.target.value; save(); speak('Hello! I am your English teacher.'); };
   app.querySelectorAll('[data-hm]').forEach(b=>b.onclick=()=>{ P.s.hm=b.dataset.hm; save(); viewSettings(); });

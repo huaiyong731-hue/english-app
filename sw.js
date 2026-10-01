@@ -1,5 +1,5 @@
-const CACHE = 'eng-zero-v2';
-const FILES = ['./', './index.html', './style.css', './data.js', './data2.js', './py.js', './app.js', './manifest.json',
+const CACHE = 'eng-zero-v3';
+const FILES = ['./', './index.html', './style.css', './data.js', './data2.js', './data3.js', './py.js', './app.js', './manifest.json',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(f => new Request(f, {cache: 'reload'})))).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
