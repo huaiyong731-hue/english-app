@@ -169,3 +169,59 @@ D.koujue = ["小 a 夾中間，短短「唉」一聲","小 e 夾中間，短短�
  "s、h 手牽手，噓～安靜囉","c、h 手牽手，嘟嘴「去」一下","舌頭伸出來，輕輕吹口氣","c、k 好朋友，只唸一次「咳」","p、h 變成 f，w、h 唸 w","兩個 o 圓圓，「ㄨ～」像月亮","o、u 被踩到，「嗷」的一聲叫",
  "母音碰到 r，舌頭捲起來","er、ir、ur，通通唸「ㄦ」","兩個子音手牽手，中間不加「ㄜ」","子音拉著 r，嘴巴嘟起來","s 先吹氣，馬上接下一個"];
 })(window.APP_DATA);
+/* 每章的場景設定：地點、常出現的人、開場白（輪流用）、顏色課用的東西。每一課的場景由該課自己的字和句子組成（見 app.js genScene）。 */
+(function(D){
+const o = t => t.trim().split('\n').map(l=>l.split('|').map(x=>x.trim()));
+D.chap = [
+ {place:'小美家', who:'小美', obj:'cat', objZh:'貓', open:o(`小美|Welcome to my home!|歡迎來我家！
+Amy|Your home is so nice.|你家好漂亮。
+小美|Come and sit down.|來坐吧。
+Amy|What are you doing, Mei?|小美，你在做什麼？
+小美|Let's play a game.|我們來玩遊戲。`)},
+ {place:'早餐桌', who:'媽媽', obj:'apple', objZh:'蘋果', open:o(`媽媽|Breakfast is ready!|早餐好了！
+小美|Good morning, Amy!|Amy 早安！
+Amy|It smells good!|好香喔！
+媽媽|Eat slowly.|慢慢吃。
+小美|I'm so hungry.|我好餓。`)},
+ {place:'市場', who:'老闆', obj:'bag', objZh:'包包', open:o(`老闆|Welcome!|歡迎光臨！
+Amy|This market is busy.|這個市場好熱鬧。
+小美|Let's look around.|我們逛逛吧。
+老闆|Fresh and cheap!|又新鮮又便宜！
+Amy|So many things!|東西好多！`)},
+ {place:'餐廳', who:'服務生', obj:'cup', objZh:'杯子', open:o(`服務生|Welcome! Here's the menu.|歡迎！這是菜單。
+Amy|This place is nice.|這家店不錯。
+小美|Let's order.|我們點餐吧。
+服務生|Are you ready to order?|可以點餐了嗎？
+小美|I'm hungry!|我餓了！`)},
+ {place:'街上', who:'路人', obj:'car', objZh:'車子', open:o(`Amy|Excuse me.|不好意思。
+小美|Let's check the map.|我們看一下地圖。
+路人|Can I help you?|需要幫忙嗎？
+Amy|I think we're lost.|我們好像迷路了。
+小美|This way!|走這邊！`)},
+ {place:'公車上', who:'司機', obj:'bus', objZh:'公車', open:o(`司機|Hello! Please get on.|你好！請上車。
+Amy|The bus is here!|公車來了！
+小美|Let's sit here.|我們坐這裡。
+司機|Next stop!|下一站！
+Amy|This bus is fast.|這台公車好快。`)},
+ {place:'電話裡', who:'Amy', obj:'phone', objZh:'手機', open:o(`小美|Hello? Amy?|喂？Amy 嗎？
+Amy|Hi, Mei! It's me.|嗨小美！是我。
+小美|Can you hear me?|聽得到嗎？
+Amy|I have a question.|我有個問題。
+小美|Let me tell you something.|跟你說一件事。`)},
+ {place:'診所', who:'醫生', obj:'pill', objZh:'藥丸', open:o(`醫生|Hello, please sit down.|你好，請坐。
+醫生|How do you feel?|你覺得怎樣？
+小美|I don't feel well.|我不太舒服。
+Amy|Don't worry, Mei.|小美別擔心。
+醫生|Let me check.|我看看。`)},
+ {place:'機場', who:'地勤', obj:'plane', objZh:'飛機', open:o(`地勤|Welcome to the airport.|歡迎來到機場。
+小美|I'm so excited!|我好興奮！
+Amy|Our trip starts now!|旅行開始了！
+地勤|Have a good flight.|祝你飛行愉快。
+小美|Look at the plane!|看那台飛機！`)},
+ {place:'咖啡店', who:'Tom', obj:'shirt', objZh:'襯衫', open:o(`Tom|Hi! I'm Tom.|嗨！我是 Tom。
+小美|Nice to meet you!|很高興認識你！
+Amy|This is my friend Mei.|這是我朋友小美。
+Tom|Let's talk!|我們聊聊吧！
+小美|You're so nice.|你人好好。`)}
+];
+})(window.APP_DATA);

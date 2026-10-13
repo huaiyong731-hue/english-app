@@ -82,8 +82,7 @@ D.dialogues.forEach((d,di) => {
 LESSONS.sort((a,b) => a.stage-b.stage || a.n-b.n);
 LESSONS.forEach((l,i) => l.idx=i);
 const byId = id => LESSONS.find(l => l.id===id);
-/* 故事裡「今天就能說」的句子 → 也是複習卡片 */
-(D.story||[]).forEach((ch,c)=>ch.scenes.forEach((sc,j)=>sc.say.forEach((p,k)=>{ p.id=addItem({id:'ph-'+c+'-'+j+'-'+k, type:'sent', en:p.en, zh:p.zh, emoji:Array.from(sc.pic)[0], hint:'', say:p.en}); })));
+/* 每一課的故事場景與「今天就能說」：見 genScene() */
 
 /* ---------- 進度儲存 ---------- */
 const KEY='eng-zero-v1';
@@ -790,7 +789,7 @@ function path(){ if(PATH) return PATH; const out=[]; const LS=k=>LESSONS.filter(
   pr.slice(4,7).forEach(x=>add('2',x));
   LS('3').forEach(l=>add('3',l)); pr.slice(7).forEach(x=>add('p',x)); LS('p').forEach(l=>add('p',l));
   LS('4').forEach(l=>add('4',l)); LS('5').forEach(l=>add('5',l)); LS('6').forEach(l=>add('6',l));
-  out.forEach((n,i)=>n.i=i); return PATH=out; }
+  out.forEach((n,i)=>n.i=i); PATH=out; out.forEach(n=>{ try{ sceneOf(n); }catch(e){ console.error('scene', n.id, e); } }); return PATH; }
 function nodeDone(n){ return n.L ? !!P.done[n.L.id] : !!blendDone()[n.bs.i]; }
 function nextNode(){ return path().find(n=>!nodeDone(n))||null; }
 function goNode(n){ go(n.L ? 'lesson/'+n.L.id : 'blend/'+n.bs.i); }
@@ -798,14 +797,62 @@ const COMBO_EX={10:[0,1,3],22:[0,1,3]};
 function comboEx(L){ return (COMBO_EX[L.n-1]||[0,1,2]).map(i=>L.items[i]).filter(Boolean); }
 /* ---------- 小美的故事 ---------- */
 function chapOf(n){ const N=path().length, K=D.story.length; return Math.min(K-1, Math.floor(n.i*K/N)); }
-function sceneOf(n){ const c=chapOf(n), ch=D.story[c], first=path().findIndex(x=>chapOf(x)===c); const j=(n.i-first)%ch.scenes.length; return {c, ch, s:ch.scenes[j]}; }
-const WHO={'小美':'👧','Amy':'👱‍♀️','媽媽':'👩','Tom':'🧑','醫生':'👩‍⚕️','老闆':'🧑‍🌾','服務生':'🧑‍🍳','司機':'🧑‍✈️','地勤':'🧑‍💼'};
+/* ---------- 每一課一個獨一無二的場景：用這一課自己的字、句子、文法，放在這一章的場所 ---------- */
+const FW={i:'我',you:'你',is:'是',are:'是',am:'是',a:'一個',an:'一個',the:'那個',this:'這個',that:'那個',it:'它',my:'我的',your:'你的',look:'看',at:'（看）',for:'代表',like:'喜歡',see:'看見',have:'有',can:'會',read:'讀',what:'什麼',does:'（助動詞）',mean:'意思',means:'意思是',"let's":'我們來',count:'數',number:'號碼',please:'請',where:'哪裡',go:'去',to:'到',want:'想要',do:'做',hurts:'痛',touch:'摸',and:'和',yes:'是的',no:'不',very:'很',"i'm":'我是',"it's":'它是',on:'在',in:'在',birthday:'生日',good:'好',job:'工作',here:'這裡',need:'需要',near:'附近',so:'好',cute:'可愛',nice:'美',really:'真的',too:'也',ok:'好',or:'還是',new:'新的'};
+function glossOf(en){ return String(en).split(' ').map(t=>{ if(/^[A-Z][.!?,]?$/.test(t) && / is for /.test(en)) return '字母 '+t.replace(/[.!?,]/,''); const k=gtok(t); return GL[k]||FW[k]||''; }); }
+const zc1 = z => String(z||'').split(/[／/、，,]/)[0].replace(/（.*?）|\(.*?\)/g,'').trim();
+const cap = x => x.charAt(0).toUpperCase()+x.slice(1);
+const LETS=/^(go|eat|drink|look|watch|listen|talk|read|write|sleep|walk|run|sit|stand|buy|play|cook|study|learn|wait|work|wash|help|swim|sing|dance|call|open|close|start|stop|come|speak|pay|make|get|rest|drive|clean|shop|meet|try|ask|answer|travel)$/;
+const FEEL=/^(hungry|thirsty|tired|happy|sad|sick|busy|young|old|tall|short|right|wrong)$/;
+function wordCore(L, its, cs){ const w=its.map(x=>x.en), lw=w.map(x=>x.toLowerCase()), z=its.map(x=>zc1(x.zh)), cat=L.title.replace(/\s*\d+$/,''), ME='小美', AMY='Amy';
+  const W=k=>lw[k%lw.length], Z=k=>z[k%z.length];
+  const adj=k=>FEEL.test(W(k))?[`I'm ${W(k)}.`,`我${Z(k)}。`]:[`It's very ${W(k)}.`,`它很${Z(k)}。`];
+  const mean=k=>[`What does ${w[k%w.length]} mean?`,`${w[k%w.length]} 是什麼意思？`];
+  const dm=k=>/day$/i.test(W(k))?[`See you on ${w[k%w.length]}!`,`${Z(k)}見！`]:[`My birthday is in ${w[k%w.length]}.`,`我的生日在${Z(k)}。`];
+  const vb=k=>LETS.test(W(k))?[`Let's ${W(k)}!`,`我們來${Z(k)}吧！`]:mean(k);
+  const bePl=k=>/^(clothes|shoes)$/.test(W(k))?'are':'is';
+  const T={
+   '數字':[[ME,`Let's count: ${W(0)}, ${W(1)}, ${W(2)}!`,`我們來數：${Z(0)}、${Z(1)}、${Z(2)}！`],[AMY,`Number ${W(3)}, please.`,`請給我 ${Z(3)} 號。`],[ME,`${cap(W(4))}! Good job!`,`${Z(4)}！很棒！`]],
+   '顏色':[[ME,`The ${cs.obj} is ${W(0)}.`,`${cs.objZh}是${Z(0)}的。`],[AMY,`I like ${W(1)}.`,`我喜歡${Z(1)}。`],[ME,`Is it ${W(2)} or ${W(3)}?`,`是${Z(2)}還是${Z(3)}？`]],
+   '家人':[[ME,`This is my ${W(0)}.`,`這是我的${Z(0)}。`],[AMY,`Is this your ${W(1)}?`,`這是你的${Z(1)}嗎？`],[ME,`Yes! And that is my ${W(2)}.`,`對！那是我的${Z(2)}。`]],
+   '身體':[[ME,`My ${W(0)} hurts.`,`我的${Z(0)}痛。`],[AMY,`Touch your ${W(1)}!`,`摸摸你的${Z(1)}！`],[ME,`This is my ${W(2)}.`,`這是我的${Z(2)}。`]],
+   '食物飲料':[[ME,`I want ${W(0)}.`,`我想要${Z(0)}。`],[AMY,`Do you like ${W(1)}?`,`你喜歡${Z(1)}嗎？`],[ME,`Yes! And ${W(2)}, please.`,`喜歡！還要${Z(2)}，謝謝。`]],
+   '動物':[[ME,`Look at the ${W(0)}!`,`看那隻${Z(0)}！`],[AMY,`I like the ${W(1)}.`,`我喜歡${Z(1)}。`],[ME,`The ${W(2)} is so cute.`,`${Z(2)}好可愛。`]],
+   '天氣與自然':[[ME,`Look at the ${W(0)}!`,`看那個${Z(0)}！`],[AMY,`I like the ${W(1)}.`,`我喜歡${Z(1)}。`],[ME,`The ${W(2)} is so nice.`,`${Z(2)}好美。`]],
+   '地點':[[AMY,`Where is the ${W(0)}?`,`${Z(0)}在哪裡？`],[ME,`Let's go to the ${W(1)}.`,`我們去${Z(1)}吧。`],[AMY,`Is the ${W(2)} near here?`,`${Z(2)}在附近嗎？`]],
+   '日常物品與交通':[[AMY,`Where ${bePl(0)} my ${W(0)}?`,`我的${Z(0)}在哪裡？`],[ME,`Here ${bePl(1)} your ${W(1)}.`,`你的${Z(1)}在這裡。`],[AMY,`I need my ${W(2)}, too.`,`我也需要我的${Z(2)}。`]],
+   '星期與月份':[[ME,...dm(0)],[AMY,...dm(1)],[ME,`${w[2%w.length]}? OK!`,`${Z(2)}？好！`]],
+   '動詞（動作）':[[ME,...vb(0)],[AMY,...vb(1)],[ME,`${cap(W(2))} means 「${Z(2)}」.`,`${W(2)} 的意思是「${Z(2)}」。`]],
+   '形容詞（描述）':[[ME,...adj(0)],[AMY,...adj(1)],[ME,...adj(2)]] };
+  let r=T[cat] || [[AMY,...mean(0)],[ME,`It means 「${Z(0)}」.`,`意思是「${Z(0)}」。`],[AMY,`And ${w[1%w.length]}? ${cap(w[2%w.length])}?`,`那 ${w[1%w.length]}（${Z(1)}）呢？${w[2%w.length]}（${Z(2)}）呢？`]];
+  return r.map(l=>[l[0], l[1].replace(/to the home\b/,'home').replace(/the home\b/,'home'), l[2]]); }
+function sceneOf(n){ if(n._sc) return n._sc;
+  const c=chapOf(n), ch=D.story[c], cs=D.chap[c], first=path().findIndex(x=>chapOf(x)===c), j=n.i-first, L=n.L, ME='小美', AMY='Amy', sp=k=>k%2?AMY:ME;
+  const op=cs.open[j%cs.open.length]; let lines, words, pic, say=[1,2];
+  const its = L ? L.items.map(id=>ITEMS[id]) : n.bs.items;
+  if(!L){ const b=its; words=b.map(x=>x.w); pic=b.slice(0,3).map(x=>x.emoji).join('');
+    lines=[op].concat(n.bs.cv ? [[ME,`${b[0].w}, ${b[1].w}!`,`${b[0].zh}、${b[1].zh}！`],[AMY,`${b[2].w}, ${b[3].w}!`,`${b[2].zh}、${b[3].zh}！`],[ME,`${b[4].w}! I can read ${b[4].w}.`,`${b[4].zh}！我會讀 ${b[4].w}。`]]
+      : [0,1,2].map(k=>[sp(k), b[k].ex, b[k].gl.join('')])); }
+  else if(L.kind==='letter'){ words=its.map(x=>x.word.toLowerCase()); pic=its.map(x=>x.emoji).join(''); lines=[op].concat(its.map((it,k)=>[sp(k), `${it.U} is for ${it.word}.`, `${it.U} 是 ${it.word}（${it.wordZh}）的 ${it.U}。`])); if(lines.length<4) lines.push([sp(2), `${cap(its[0].word)} and ${its[its.length-1].word.toLowerCase()}!`, `${its[0].wordZh}和${its[its.length-1].wordZh}！`]); }
+  else if(L.kind==='phon'){ const w=its.map(x=>x.en.toLowerCase()), z=its.map(x=>zc1(x.zh)), v=j%3; words=w; pic=its.slice(0,3).map(x=>x.emoji).join('');
+    lines=[op].concat(v===0?[[ME,`I can read ${w[0]}.`,`我會讀 ${w[0]}（${z[0]}）。`],[AMY,`Can you read ${w[1]}?`,`你會讀 ${w[1]}（${z[1]}）嗎？`],[ME,`Yes! ${cap(w[1])} and ${w[2]}.`,`會！${z[1]}和${z[2]}。`]]
+      : v===1?[[AMY,`Look! ${cap(w[0])}!`,`看！${z[0]}！`],[ME,`I see ${w[0]} and ${w[1]}.`,`我看到${z[0]}和${z[1]}。`],[AMY,`And ${w[2]}, too!`,`還有${z[2]}！`]]
+      : [[ME,`Let's read: ${w[0]}, ${w[1]}.`,`我們來讀：${z[0]}、${z[1]}。`],[AMY,`What does ${w[2]} mean?`,`${w[2]} 是什麼意思？`],[ME,`It means 「${z[2]}」.`,`意思是「${z[2]}」。`]]); }
+  else if(L.kind==='word'){ words=its.map(x=>x.en.toLowerCase()); pic=its.slice(0,3).map(x=>x.emoji).join(''); lines=[op].concat(wordCore(L, its, cs)); }
+  else if(L.kind==='dlg'){ const m={A:(cs.who!==ME&&cs.who!==AMY?cs.who:AMY),B:ME}; words=its.map(x=>x.en); pic=its[0].emoji+'💬'+its[1].emoji; lines=its.slice(0,4).map(x=>[m[x.spk]||ME, x.en.replace(/\bLin\b/g,'Mei'), x.zh.replace(/Lin/g,'小美')]); say=[0,1]; }
+  else if(L.kind==='prin'){ words=its.map(x=>x.en); pic=its.slice(0,3).map(x=>x.emoji).join(''); lines=[op].concat(its.slice(0,3).map((it,k)=>/\s/.test(it.en)?[sp(k), it.en, it.zh]:[sp(k), `What does ${it.en} mean?`, `${it.en} 是什麼意思？（${it.zh}）`])); }
+  else { words=its.map(x=>x.en); pic=its.slice(0,3).map(x=>x.emoji).join(''); lines=[op].concat(its.slice(0,3).map((it,k)=>[k===2&&cs.who!==ME&&cs.who!==AMY?cs.who:sp(k), it.en, it.zh])); }
+  if(L&&L.kind!=='dlg' && lines[1][0]===lines[0][0]) lines=lines.map((l,k)=>k?[l[0]===ME?AMY:l[0]===AMY?ME:l[0], l[1], l[2]]:l);
+  const sc={title:cs.place+'・'+n.title, pic:ch.icon+(pic||''), lines, words,
+    say:say.map((k,q)=>({en:lines[k][1], zh:lines[k][2], g:glossOf(lines[k][1]), id:addItem({id:'ph-'+n.id+'-'+q, type:'sent', en:lines[k][1], zh:lines[k][2], emoji:Array.from(pic||ch.icon)[0], hint:'', say:lines[k][1]})}))};
+  return n._sc={c, ch, s:sc}; }
+const WHO={'小美':'👧','路人':'🧑‍💼','Amy':'👱‍♀️','媽媽':'👩','Tom':'🧑','醫生':'👩‍⚕️','老闆':'🧑‍🌾','服務生':'🧑‍🍳','司機':'🧑‍✈️','地勤':'🧑‍💼'};
 function miniMap(){ const nn=nextNode(), cur=nn?chapOf(nn):D.story.length-1, ps=path();
   return `<a class="card minimap" href="#/course"><div class="mm-row">${D.story.map((ch,c)=>`<span class="mm ${c<cur?'ok':c===cur?'cur':''}">${c===cur?'<em class="me">👧</em>':''}${ch.icon}</span>`).join('<i></i>')}</div>
    <small>📍 第 ${cur+1} 章：${esc(D.story[cur].t)}・全部 ${ps.filter(nodeDone).length} / ${ps.length} 課 ›</small></a>`; }
-function sceneHTML(n){ const {c,ch,s}=sceneOf(n), key=s.say.map(p=>p.en.replace(/[.!?]$/,''));
+function sceneHTML(n){ const {c,ch,s}=sceneOf(n), key=s.say.map(p=>p.en);
   return `<div class="scene"><div class="sc-top">${ch.icon} 第 ${c+1} 章・${esc(ch.t)}</div><div class="sc-pic">${s.pic}</div><h2 class="center">${esc(s.title)}</h2>
-   <div class="sc-lines">${s.lines.map((l,i)=>`<div class="sc-line ${l[0]==='小美'?'me':''}" data-li="${i}"><span class="who">${WHO[l[0]]||'🧑'}<small>${esc(l[0])}</small></span><div class="sb"><b>${esc(l[1])}${key.some(k=>l[1].includes(k))?' ⭐':''}</b><span>${esc(l[2])}</span></div></div>`).join('')}</div>
+   <div class="sc-lines">${s.lines.map((l,i)=>`<div class="sc-line ${l[0]==='小美'?'me':''}" data-li="${i}"><span class="who">${WHO[l[0]]||'🧑'}<small>${esc(l[0])}</small></span><div class="sb"><b>${esc(l[1])}${key.includes(l[1])?' ⭐':''}</b><span>${esc(l[2])}</span></div></div>`).join('')}</div>
    <button class="btn sound" id="scplay">▶ 聽這一段</button><small class="center">⭐ 是今天要學會說的話</small></div>`; }
 function bindScene(n){ const {s}=sceneOf(n), rows=[...app.querySelectorAll('.sc-line')]; let tok=0;
   const vo=w=> w==='小美'?{pitch:1.25}:w==='Amy'?(altVoice()?{voice:altVoice()}:{pitch:1.05}):{pitch:0.85};
@@ -969,7 +1016,7 @@ function bQuiz(it){ const others=shuffle(B.S.items.filter(x=>x!==it)).slice(0,2)
 
 /* ---------- 啟動 ---------- */
 window.addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); window.__BIP=e; if(route().v==='settings') render(); });
-window.__APP = {LESSONS, ITEMS, STAGES};
+window.__APP = {LESSONS, ITEMS, STAGES, scenes:()=>path().map(n=>({id:n.id, title:n.title, kind:n.L?n.L.kind:'blend', s:sceneOf(n).s}))};
 render();
 if('serviceWorker' in navigator && /^https?:/.test(location.protocol) && !window.INLINE_BUILD){ window.addEventListener('load', ()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
   const had=!!navigator.serviceWorker.controller; let reloaded=false; navigator.serviceWorker.addEventListener('controllerchange', ()=>{ if(had && !reloaded){ reloaded=true; location.reload(); } }); }
