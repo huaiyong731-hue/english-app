@@ -198,6 +198,8 @@ function nav(cur){ const tabs=[['home','🏠','首頁'],['course','📚','課程
 function page(cur, html){ active=false; FLOW=false; stopSpeak(); app.innerHTML='<main class="page">'+html+'</main>'+nav(cur); window.scrollTo(0,0); }
 function render(){ const r=route();
   if(r.v==='lesson') return startLesson(byId(r.a));
+  if(r.v==='under') return (r.a?startUnit(r.a):viewUnder());
+  if(r.v==='splitter') return viewSplitter(r.a);
   if(r.v==='review') return startReview(r.a==='free');
   if(r.v==='checkin') return startCheckin();
   if(r.v==='blend') return (r.a!=null && r.a!=='') ? startBlend(r.a) : viewCourse();
@@ -230,7 +232,7 @@ function flowNext(){ FLOW=true; const S=todayState(); if(S.rv) return go('review
 function doneToday(){ const nn=nextNode(); const m='今天的都完成了，好棒喔 🎉';
   page('home', `<div class="center intro"><div class="emoji-big bounce">🏆</div><h1>今天完成了！</h1>${tbub(m,'happy')}
    <p class="lead">🔥 連續學習 ${P.streak||0} 天<br>明天再來，記得更牢喔 😊</p>
-   <button class="btn primary huge" id="hm">🏠 回首頁</button>${nn?`<a class="more" href="#/${nn.L?'lesson/'+nn.L.id:'blend/'+nn.bs.i}">想多學一點？再學一課 ›</a>`:''}</div>`);
+   <button class="btn primary huge" id="hm">🏠 回首頁</button>${nn?`<a class="more" href="#/${nodeHref(nn)}">想多學一點？再學一課 ›</a>`:''}</div>`);
   speakT(m); sfx('win'); confetti(30); document.getElementById('hm').onclick=()=>go('home'); }
 /* 完成畫面的按鈕：在每日流程裡就「下一步」，不然就回首頁 */
 function endBtns(extra){ return `<button class="btn primary huge" id="nxf">${FLOW?'▶ 下一步':'🏠 回首頁'}</button>${extra||''}`; }
@@ -303,10 +305,10 @@ function ckDone(){
 /* ---------- 課程：一條路線 ---------- */
 function viewCourse(){
   const ps=path(), nn=nextNode(), cur=nn?chapOf(nn):D.story.length-1;
-  page('course', `<h1>🗺️ 小美的故事地圖</h1><p class="lead">跟著小美，一章一章往前走 😊</p><div class="map">${D.story.map((ch,c)=>{
+  page('course', `<h1>🗺️ 小美的故事地圖</h1><p class="lead">跟著小美，一章一章往前走 😊</p>${(()=>{ const us=ps.filter(n=>n.U), d=us.filter(nodeDone).length; return `<a class="ucta" href="#/under"><span>🧠</span><b>怎麼看懂英文</b><small>${d} / ${us.length} 課・學會拆開一句英文</small></a><a class="ucta tool" href="#/splitter"><span>🔧</span><b>拆句子小工具</b><small>選一句，看它怎麼拆</small></a>`; })()}<div class="map">${D.story.map((ch,c)=>{
     const ns=ps.filter(n=>chapOf(n)===c), d=ns.filter(nodeDone).length, st=(d===ns.length)?'ok':c===cur?'cur':'';
     return `<details class="stop ${st} ${c%2?'r':'l'}" ${c===cur?'open':''}><summary><span class="pin">${ch.icon}${c===cur?'<em class="me">👧</em>':''}</span><span class="st-t"><b>第 ${c+1} 章・${esc(ch.t)}</b><small>${d} / ${ns.length} 課</small><i class="mbar"><i style="width:${Math.round(d/ns.length*100)}%"></i></i></span></summary>
-    ${ns.map(n=>{ const ok=nodeDone(n), sec=SECS.find(x=>x[0]===n.sec); return `<a class="lrow ${ok?'ok':''} ${n===nn?'nextup':''}" href="#/${n.L?'lesson/'+n.L.id:'blend/'+n.bs.i}"><span class="ln">${ok?'✅':n.i+1}</span><span class="lt">${sec[2]} ${esc(n.title)}</span>${n===nn?'<em>下一課</em>':''}</a>`; }).join('')}</details>`; }).join('')}</div>`);
+    ${ns.map(n=>{ const ok=nodeDone(n), sec=SECS.find(x=>x[0]===n.sec); return `<a class="lrow ${ok?'ok':''} ${n===nn?'nextup':''}" href="#/${nodeHref(n)}"><span class="ln">${ok?'✅':n.i+1}</span><span class="lt">${sec[2]} ${esc(n.title)}</span>${n===nn?'<em>下一課</em>':''}</a>`; }).join('')}</details>`; }).join('')}</div>`);
   const c=app.querySelector('.lrow.nextup'); if(c) setTimeout(()=>c.scrollIntoView({block:'center'}),60);
 }
 
@@ -778,21 +780,23 @@ function tileSound(it, j){ const ls=it.w.split(''); if(it.cv && j===1) return '�
 function blendDone(){ P.bl=P.bl||{}; return P.bl; }
 function nextSet(){ const d=blendDone(); const f=BS.find(s=>!d[s.i]); return f||null; }
 /* ---------- 一條學習路線 ---------- */
-const SECS=[['1','字母','🔤'],['b','拼讀','🧩'],['2','自然發音','🗣️'],['3','基礎單字','🍎'],['p','句型','🔁'],['4','常用句子','💬'],['5','文法','📐'],['6','對話','👫']];
+const SECS=[['1','字母','🔤'],['b','拼讀','🧩'],['u','看懂英文','🧠'],['2','自然發音','🗣️'],['3','基礎單字','🍎'],['p','句型','🔁'],['4','常用句子','💬'],['5','文法','📐'],['6','對話','👫']];
 let PATH=null;
 function path(){ if(PATH) return PATH; const out=[]; const LS=k=>LESSONS.filter(l=>STAGES[l.stage].key===k); const pr=LS('r');
   const add=(sec,x)=>{ if(!x) return; out.push(x.kind ? {sec, L:x, id:x.id, title:x.title} : Object.assign({sec}, x)); };
   /* 英文的原理放進路線裡相關的地方 */
   LS('1').forEach(l=>add('1',l)); add('1',pr[0]); add('b',pr[1]);
   BS.forEach(s=>add('b',{bs:s, id:'bl-'+s.i, title:'拼讀 '+s.t}));
+  (D.under||[]).forEach(u=>add('u',{U:u, id:u.id, title:u.t}));
   LS('2').forEach((l,i)=>{ if(i===8) add('2',pr[2]); if(i===11) add('2',pr[3]); add('2',l); });
   pr.slice(4,7).forEach(x=>add('2',x));
   LS('3').forEach(l=>add('3',l)); pr.slice(7).forEach(x=>add('p',x)); LS('p').forEach(l=>add('p',l));
   LS('4').forEach(l=>add('4',l)); LS('5').forEach(l=>add('5',l)); LS('6').forEach(l=>add('6',l));
   out.forEach((n,i)=>n.i=i); PATH=out; out.forEach(n=>{ try{ sceneOf(n); }catch(e){ console.error('scene', n.id, e); } }); return PATH; }
-function nodeDone(n){ return n.L ? !!P.done[n.L.id] : !!blendDone()[n.bs.i]; }
+const nodeHref = n => n.L ? 'lesson/'+n.L.id : n.U ? 'under/'+n.id : 'blend/'+n.bs.i;
+function nodeDone(n){ return n.U ? !!P.done[n.id] : n.L ? !!P.done[n.L.id] : !!blendDone()[n.bs.i]; }
 function nextNode(){ return path().find(n=>!nodeDone(n))||null; }
-function goNode(n){ go(n.L ? 'lesson/'+n.L.id : 'blend/'+n.bs.i); }
+function goNode(n){ go(nodeHref(n)); }
 const COMBO_EX={10:[0,1,3],22:[0,1,3]};
 function comboEx(L){ return (COMBO_EX[L.n-1]||[0,1,2]).map(i=>L.items[i]).filter(Boolean); }
 /* ---------- 小美的故事 ---------- */
@@ -827,6 +831,8 @@ function wordCore(L, its, cs){ const w=its.map(x=>x.en), lw=w.map(x=>x.toLowerCa
   let r=T[cat] || [[AMY,...mean(0)],[ME,`It means 「${Z(0)}」.`,`意思是「${Z(0)}」。`],[AMY,`And ${w[1%w.length]}? ${cap(w[2%w.length])}?`,`那 ${w[1%w.length]}（${Z(1)}）呢？${w[2%w.length]}（${Z(2)}）呢？`]];
   return r.map(l=>[l[0], l[1].replace(/to the home\b/,'home').replace(/the home\b/,'home'), l[2]]); }
 function sceneOf(n){ if(n._sc) return n._sc;
+  if(n.U){ const c=chapOf(n), ch=D.story[c], cs=D.chap[c], u=n.U, lines=u.scene.lines;
+    return n._sc={c, ch, s:{title:cs.place+'・'+n.title, pic:ch.icon+u.scene.pic, lines, words:u.kw, say:u.scene.say.map((k,q)=>({en:lines[k][1], zh:lines[k][2], g:glossOf(lines[k][1]), id:addItem({id:'ph-'+n.id+'-'+q, type:'sent', en:lines[k][1], zh:lines[k][2], emoji:Array.from(u.scene.pic)[0], hint:'', say:lines[k][1]})}))}}; }
   const c=chapOf(n), ch=D.story[c], cs=D.chap[c], first=path().findIndex(x=>chapOf(x)===c), j=n.i-first, L=n.L, ME='小美', AMY='Amy', sp=k=>k%2?AMY:ME;
   const op=cs.open[j%cs.open.length]; let lines, words, pic, say=[1,2];
   const its = L ? L.items.map(id=>ITEMS[id]) : n.bs.items;
@@ -1014,9 +1020,113 @@ function bQuiz(it){ const others=shuffle(B.S.items.filter(x=>x!==it)).slice(0,2)
     else { sfx('no'); miss++; b.classList.add('soft-miss'); b.disabled=true; fb.innerHTML=tbub(miss>1?'按 💡 提示喔，我們一個一個聽':'差一點點耶，我們再來一次喔 😊'); speakT(miss>1?'按提示喔，我們一個一個聽':'差一點點耶，我們再來一次喔'); } });
 }
 
+/* ---------- 🧠 怎麼看懂英文：10 個小課＋拆句子小工具 ---------- */
+const ROLE={S:'主語',V:'動詞',O:'受詞',C:'樣子',P:'哪裡',T:'什麼時候',Q:'問句字',X:'其他',N:'名詞',A:'形容詞'};
+const UHINT={V:'動作的字，會告訴你「在做什麼」',S:'主語是「誰」，通常在動作的前面',O:'受詞是動作做的「東西」',P:'要找「在哪裡」的那一塊',T:'要找「什麼時候」的那一塊',Q:'問句字像 Where、What，在最前面喔',C:'這塊在說「怎麼樣」',X:'再看看小字喔',N:'名詞是「東西」',A:'形容詞是「樣子」'};
+const pDSL = s => [...String(s).matchAll(/\[(\w):([^\]=~]*)(?:=([^\]~]*))?(?:~([^\]]*))?\]([,.?!]*)/g)].map(m=>({r:m[1], t:m[2], z:m[3]||'', g:m[4]?m[4].split('/'):null, p:m[5]||''}));
+const fromRow = c => ({r:c[0], t:c[1], z:c[2], g:String(c[3]||'').split('/'), p:c[4]||''});
+const plainOf = cs => cs.map(c=>c.t+(c.p||'')).join(' ').replace(/ '/g,"'");
+const wgOf = c => c.g || glossOf(c.t);
+function blkHTML(c, o){ o=o||{}; const g=(o.gl&&c.t.trim().includes(' '))?wgOf(c):null;
+  return `<span class="blk k-${c.r}${c.t[0]==="'"?' ct':''}${o.cls?' '+o.cls:''}" ${o.attr||''}><b>${esc(c.t)}${esc(c.p||'')}</b>${c.z?`<i>${esc(c.z)}</i>`:''}${o.tag?`<u>${ROLE[c.r]||''}</u>`:''}${g?`<s>${c.t.split(' ').map((w,j)=>`<em><q>${esc(w)}</q>${esc(g[j]||'·')}</em>`).join('')}</s>`:''}</span>`; }
+function cardHTML(c){ let h='<div class="card ucard">'; if(c.h) h+=`<h3>${esc(c.h)}</h3>`;
+  if(c.list) h+='<div class="ulist">'+c.list.map(r=>`<div class="ur">${r.map((x,i)=>`<span class="u${i}">${esc(x)}</span>`).join('')}</div>`).join('')+'</div>';
+  (c.rows||[]).forEach(r=>{ const d=r[1], dsl=/\[/.test(d), cs=dsl?pDSL(d):[]; h+=`<div class="urow">${r[0]?`<span class="ulab">${esc(r[0])}</span>`:''}<div class="ublks">${dsl?cs.map(x=>blkHTML(x,{tag:c.tag})).join(''):`<span class="utxt">${esc(d)}</span>`}</div>${dsl&&!/[\u4e00-\u9fff]/.test(plainOf(cs))?`<button class="mini" data-say="${esc(plainOf(cs))}">🔊</button>`:''}</div>`; });
+  if(c.slash){ const cs=pDSL(c.slash); h+=`<div class="slash">${cs.map(x=>`<span class="k k-${x.r}">${esc(x.t)}</span>`).join('<em> / </em>')}</div>`; }
+  if(c.zh) h+=`<div class="uzh">${esc(c.zh)}</div>`; return h+'</div>'; }
+function stepChunks(s){ if(s.keys){ let cs=[], zh=[]; s.keys.forEach(k=>{ const e=(D.chunked||[]).find(x=>x[0]===k); if(e){ cs=cs.concat(e[3].map(fromRow)); zh.push(e[1]); } }); return {cs, zh:zh.join(' '), en:s.keys.join(' ')}; }
+  const cs=pDSL(s.s); return {cs, zh:s.zh||'', en:plainOf(cs)}; }
+let U=null;
+function uframe(inner){ const pct=Math.round(U.i/(U.steps.length-1)*100);
+  app.innerHTML=`<main class="page run"><div class="runtop"><button class="x" id="quit" aria-label="離開">✕</button><div class="bar"><i style="width:${pct}%"></i></div></div>${inner}</main>`;
+  document.getElementById('quit').onclick=()=>{ stopSpeak(); U=null; FLOW=false; go('home'); }; window.scrollTo(0,0); }
+function uNext(){ stopSpeak(); U.i++; uStep(); }
+function uCount(ok){ U.total++; if(ok) U.right++; sfx(ok?'ok':'no'); }
+function startUnit(id){ const n=path().find(x=>x.id===id); if(!n||!n.U) return go('under'); stopSpeak(); active=true;
+  U={n, u:n.U, i:0, right:0, total:0, steps:[{k:'intro'}].concat(n.U.steps, [{k:'say'},{k:'done'}])}; uStep(); }
+function uStep(){ const s=U.steps[U.i], n=U.n, nx='<button class="btn primary huge" id="nx">下一步 ▶</button>', bindNx=()=>{ const b=document.getElementById('nx'); if(b) b.onclick=uNext; };
+  if(s.k==='intro'){ const pv=path()[n.i-1]; let t=pv?pv.title:''; if(t.length>9) t=t.slice(0,8)+'…'; const b1=pv?'上次學了「'+t+'」喔，今天學怎麼看懂英文 🧠':'今天開始學怎麼看懂英文喔 🧠';
+    uframe(`${sceneHTML(n)}${tbub(b1)}<p class="small center">🧠 怎麼看懂英文・第 ${U.u.id.slice(1)} / ${D.under.length} 課</p><button class="btn primary huge" id="nx">開始學 ▶</button>`);
+    const play=bindScene(n); document.getElementById('nx').onclick=()=>{ unlock(); acx(); uNext(); };
+    if(P.s.tauto) speakT(b1, false, ()=>{ if(P.s.auto && U && U.steps[U.i]===s) setTimeout(play,300); }); else if(P.s.auto) play(); }
+  else if(s.k==='tb'){ uframe(`<h1 class="uh">${esc(U.u.t)}</h1>${s.b.map(b=>tbub(b)).join('')}${(s.v||[]).map(cardHTML).join('')}${nx}`); bindNx(); autoT(s.b); }
+  else if(s.k==='read'){ const {cs,zh,en}=stepChunks(s);
+    uframe(`<h1 class="uh">一塊一塊讀</h1>${tbub('先聽整句，再一塊一塊聽喔')}<div class="card ucard"><div class="slash">${cs.map(x=>`<span class="k k-${x.r}">${esc(x.t)}</span>`).join('<em> / </em>')}</div><div class="ublks big">${cs.map((x,i)=>blkHTML(x,{gl:1,tag:1,attr:'data-ci="'+i+'"'})).join('')}</div><div class="uzh">${esc(zh)}</div>
+      <div class="row-c"><button class="btn sound" data-say="${esc(en)}">🔊 整句</button><button class="btn sound slow" id="byb">🐢 一塊一塊聽</button></div></div>${nx}`); bindNx();
+    const bl=[...app.querySelectorAll('.blk')]; let tk=0; const mark=i=>bl.forEach((b,j)=>b.classList.toggle('now',j===i));
+    bl.forEach((b,i)=>b.onclick=()=>{ tk++; mark(i); speak(cs[i].t.replace(/^'/,"'"), {rate:0.7, onend:()=>mark(-1)}); });
+    document.getElementById('byb').onclick=()=>{ unlock(); const my=++tk; let i=0; const st=()=>{ if(my!==tk||!document.getElementById('byb')) return; if(i>=cs.length){ mark(-1); setTimeout(()=>{ if(my===tk) speak(en,{rate:0.8}); },300); return; } mark(i); speak(cs[i].t, {rate:0.7, onend:()=>{ i++; setTimeout(st,350); }}); }; st(); };
+    autoT(['先聽整句，再一塊一塊聽喔']); }
+  else if(s.k==='mc'){ const opts=shuffle(s.o.map((t,i)=>({t,ok:i===s.a})));
+    uframe(`<h1 class="uh">小測驗</h1><div class="card ucard"><div class="uq">${esc(s.q)}</div>${s.sp?`<button class="btn sound" data-say="${esc(s.sp)}">🔊 聽</button>`:''}</div><div class="opts">${opts.map((o,i)=>`<button class="opt" data-i="${i}">${esc(o.t)}</button>`).join('')}</div><div id="fb"></div>`);
+    let miss=false; const fb=document.getElementById('fb');
+    app.querySelectorAll('.opt').forEach(b=>b.onclick=()=>{ const o=opts[+b.dataset.i]; if(o.ok){ app.querySelectorAll('.opt').forEach(y=>y.disabled=true); b.classList.add('right'); uCount(!miss); confetti(10); const m=rnd(D.cheers); fb.innerHTML=tbub(m,'happy')+`<div class="card mini">${esc(s.w||'')}</div>${nx}`; speakT(m.replace(/[!！]/g,'')); bindNx(); }
+      else { b.disabled=true; b.classList.add('soft-miss'); if(!miss){ miss=true; sfx('no'); } fb.innerHTML=tbub('差一點點耶，再想想看喔 😊'); } }); }
+  else if(s.k==='tap'){ const {cs,zh,en}=stepChunks(s); let q=0, miss=false;
+    uframe(`<h1 class="uh">點點看</h1><div id="tp">${tbub(s.asks[0][1])}</div><div class="card ucard"><div class="ublks big taps">${cs.map((x,i)=>`<button class="blk tapb" data-ci="${i}"><b>${esc(x.t)}${esc(x.p)}</b></button>`).join('')}</div><div id="tz" class="uzh"></div></div><div id="tfb"></div>`);
+    const tp=document.getElementById('tp'), fb=document.getElementById('tfb');
+    app.querySelectorAll('.tapb').forEach(b=>b.onclick=()=>{ const i=+b.dataset.ci, want=s.asks[q][0]; if(i===want){ const c=cs[i]; b.outerHTML=blkHTML(c,{tag:1,cls:'got'}); uCount(!miss); miss=false; q++; fb.innerHTML=''; if(q<s.asks.length){ tp.innerHTML=tbub(s.asks[q][1]); speakT(s.asks[q][1].replace(/^[①②③④] /,'')); } else { tp.innerHTML=tbub(rnd(D.cheers),'happy'); confetti(14); document.getElementById('tz').textContent=zh; fb.innerHTML=`<div class="row-c"><button class="btn sound" data-say="${esc(en)}">🔊 聽整句</button></div>${nx}`; app.querySelectorAll('.tapb').forEach(x=>x.disabled=true); bindNx(); speak(en,{rate:0.8}); } }
+      else { if(!miss){ miss=true; sfx('no'); } b.classList.add('shake'); setTimeout(()=>b.classList.remove('shake'),400); const w=cs[want].r, m='不是這塊喔，再找找看～'+(UHINT[w]||''); fb.innerHTML=`<div class="fb soft">${esc(m)}</div>`; speakT('再找找看喔，'+(UHINT[w]||'')); } });
+    speakT(s.asks[0][1].replace(/^[①②③④] /,'')); }
+  else if(s.k==='build'){ const {cs,zh,en}=stepChunks(s), order=shuffle(cs.map((c,i)=>i)); let cur=[], miss=false;
+    uframe(`<h1 class="uh">${esc(s.prompt||'排積木')}</h1>${tbub(s.prompt?'一塊一塊點，排出正確的順序':'把積木排成一句話喔')}<div class="card ucard"><div id="built" class="ublks big built"></div><div class="uzh">${esc(zh)}</div></div><div class="ublks big tiles2">${order.map(i=>`<button class="blk tile2 k-${cs[i].r}" data-k="${i}"><b>${esc(cs[i].t)}</b>${cs[i].z?`<i>${esc(cs[i].z)}</i>`:''}</button>`).join('')}</div><div id="bfb"></div><div class="actions"><button class="btn soft" id="undo">↩ 重來</button></div>`);
+    const built=document.getElementById('built'), tl=[...app.querySelectorAll('.tile2')], fb=document.getElementById('bfb');
+    const draw=()=>{ built.innerHTML=cur.map(k=>`<span class="blk k-${cs[k].r}"><b>${esc(cs[k].t)}${esc(cs[k].p)}</b></span>`).join(''); };
+    tl.forEach(t=>t.onclick=()=>{ if(t.classList.contains('used')) return; const k=+t.dataset.k; t.classList.add('used'); cur.push(k); sfx('ok'); draw();
+      if(cur.length===cs.length){ const ok=cur.every((k,j)=>k===j); if(ok){ uCount(!miss); confetti(14); tl.forEach(x=>x.disabled=true); fb.innerHTML=tbub(rnd(D.cheers),'happy')+`<div class="row-c"><button class="btn sound" data-say="${esc(en)}">🔊 聽整句</button></div>${nx}`; document.getElementById('undo').style.display='none'; bindNx(); if(!/[\u4e00-\u9fff]/.test(en)) speak(en,{rate:0.8}); }
+        else { if(!miss){ miss=true; sfx('no'); } fb.innerHTML='<div class="fb soft">順序有一點點不同喔，我們再排一次 😊</div>'; setTimeout(()=>{ cur=[]; tl.forEach(x=>x.classList.remove('used')); draw(); },900); } } });
+    document.getElementById('undo').onclick=()=>{ cur=[]; tl.forEach(x=>x.classList.remove('used')); draw(); fb.innerHTML=''; }; }
+  else if(s.k==='chunkit'){ const {cs,zh,en}=stepChunks(s); const toks=[], bounds=new Set();
+    cs.forEach((c,ci)=>{ const ws=c.t.split(' '); ws.forEach((w,j)=>{ toks.push(w+(j===ws.length-1?c.p:'')); if(j===ws.length-1 && ci<cs.length-1) bounds.add(toks.length-1); }); });
+    const cut=new Set(); let done=false;
+    uframe(`<h1 class="uh">換你切切看</h1>${tbub('點字和字中間的 ｜，把句子切成塊')}<div class="card ucard"><div class="cutline">${toks.map((w,i)=>`<span class="cw">${esc(w)}</span>${i<toks.length-1?`<button class="gap" data-i="${i}" aria-label="切">｜</button>`:''}`).join('')}</div><div class="row-c"><button class="btn sound" data-say="${esc(en)}">🔊 聽</button><button class="btn soft" id="hint">💡 提示</button></div></div><div id="cfb"></div><button class="btn primary huge" id="chk">✂️ 對答案</button>`);
+    const gaps=[...app.querySelectorAll('.gap')], fb=document.getElementById('cfb');
+    gaps.forEach(g=>g.onclick=()=>{ if(done) return; const i=+g.dataset.i; if(cut.has(i)){ cut.delete(i); g.classList.remove('on'); } else { cut.add(i); g.classList.add('on'); sfx('ok'); } });
+    document.getElementById('hint').onclick=()=>{ const v=cs.find(c=>c.r==='V'); fb.innerHTML=`<div class="fb soft">先找動作（動詞）：${v?'它是「'+esc(v.t)+'」':''}。動詞通常自己一塊，或和助動詞一起喔</div>`; };
+    document.getElementById('chk').onclick=()=>{ if(done){ uNext(); return; } done=true; const ok=cut.size===bounds.size&&[...cut].every(i=>bounds.has(i)); uCount(ok); if(ok) confetti(16);
+      gaps.forEach(g=>{ const i=+g.dataset.i; g.disabled=true; g.classList.toggle('on',bounds.has(i)); g.classList.toggle('bad',cut.has(i)&&!bounds.has(i)); });
+      const m=ok?rnd(D.cheers):'差一點點耶，老師的切法在下面，一起看看喔 😊';
+      fb.innerHTML=tbub(m,ok?'happy':'')+`<div class="card ucard"><div class="ublks big">${cs.map(x=>blkHTML(x,{gl:1,tag:1})).join('')}</div><div class="uzh">${esc(zh)}</div><div class="row-c"><button class="btn sound" data-say="${esc(en)}">🔊 聽整句</button></div></div>`;
+      document.getElementById('chk').textContent='下一步 ▶'; speakT(m.replace(/[!！]/g,'')); }; }
+  else if(s.k==='say'){ uframe(sayHTML(n)+'<div class="actions"><button class="btn primary" id="nx">我會說了 ▶</button></div>'); autoT(['這兩句今天就能用喔']); document.getElementById('nx').onclick=()=>{ sceneOf(n).s.say.forEach(p=>learnCard(p.id)); uNext(); }; }
+  else if(s.k==='done'){ const acc=U.total?U.right/U.total:1, stars=acc>=0.9?3:acc>=0.6?2:1; const first=!P.done[n.id]; P.done[n.id]=Math.max(P.done[n.id]||0, stars); if(first) P.dayLesson=dayStr(); markStudy(); save();
+    const m=rnd(PRAISE); uframe(`<div class="center intro"><div class="emoji-big bounce">🧠</div><h1>完成了！</h1><div class="stars">${'⭐'.repeat(stars)}</div>${tbub(m,'happy')}${endBtns('<a class="more" href="#/splitter">🔧 試試「拆句子小工具」</a><a class="more" id="again" href="javascript:void 0">🔁 再做一次</a>')}</div>`);
+    speakT(m); sfx('win'); confetti(28); bindEnd(); document.getElementById('again').onclick=()=>startUnit(n.id); } }
+/* 🧠 課程清單 */
+function viewUnder(){ const ps=path().filter(n=>n.U), nn=ps.find(n=>!nodeDone(n)), d=ps.filter(nodeDone).length;
+  page('course', `<h1>🧠 怎麼看懂英文</h1><p class="lead">10 個很短的小課：學會拆開一句英文，就看得懂囉 😊</p>
+   <div class="card today"><div class="trow ${d===ps.length?'ok':''}"><span>${d===ps.length?'✅':'🧠'}</span><b>${d} / ${ps.length} 課完成</b></div><div class="bar"><i style="width:${Math.round(d/ps.length*100)}%"></i></div></div>
+   ${nn?`<button class="btn primary huge" id="ugo">${d?'▶ 繼續：':'▶ 開始：'}${esc(nn.title)}</button>`:''}
+   <div class="lrows">${ps.map(n=>{ const ok=nodeDone(n); return `<a class="lrow ${ok?'ok':''} ${n===nn?'nextup':''}" href="#/under/${n.id}"><span class="ln">${ok?'✅':n.U.id.slice(1)}</span><span class="lt">${esc(n.title)}</span>${n===nn?'<em>下一課</em>':''}</a>`; }).join('')}</div>
+   <a class="ucta tool" href="#/splitter"><span>🔧</span><b>拆句子小工具</b><small>選一句學過的句子，看它怎麼拆</small></a>`);
+  const g=document.getElementById('ugo'); if(g) g.onclick=()=>{ unlock(); acx(); FLOW=false; go('under/'+nn.id); }; }
+/* 🔧 拆句子小工具 */
+function learnedEn(){ const s=new Set(); LESSONS.forEach(L=>{ if(P.done[L.id]) L.items.forEach(id=>{ const it=ITEMS[id]; if(it) s.add(it.en); }); }); Object.keys(P.cards).forEach(id=>{ const it=ITEMS[id]; if(it) s.add(it.en); }); return s; }
+let SPQ={q:'', all:null};
+function viewSplitter(a){ const CH=D.chunked||[]; if(a!=null && a!=='' && CH[+a]) return splitDetail(+a);
+  const L=learnedEn(), nl=CH.filter(e=>L.has(e[0])).length; if(SPQ.all===null) SPQ.all=nl===0;
+  page('course', `<h1>🔧 拆句子小工具</h1><p class="lead">選一句，看它怎麼拆成 <span class="k k-S">主語</span> <span class="k k-V">動詞</span> <span class="k k-O">受詞</span> <span class="k k-P">其他</span></p>
+   <input id="sq" class="sq" type="search" placeholder="🔍 找句子（英文或中文）" value="${esc(SPQ.q)}">
+   <div class="chips"><button class="chip ${SPQ.all?'':'on'}" data-f="0">學過的（${nl}）</button><button class="chip ${SPQ.all?'on':''}" data-f="1">全部（${CH.length}）</button></div><div id="slist"></div>`);
+  const draw=()=>{ const q=SPQ.q.trim().toLowerCase(); let rowsH=CH.map((e,i)=>[e,i]).filter(([e])=>(SPQ.all||L.has(e[0])) && (!q||e[0].toLowerCase().includes(q)||e[1].includes(q)));
+    document.getElementById('slist').innerHTML = rowsH.length ? rowsH.slice(0,80).map(([e,i])=>`<a class="lrow ${L.has(e[0])?'ok':''}" href="#/splitter/${i}"><span class="ln">${L.has(e[0])?'✅':'💬'}</span><span class="lt">${esc(e[0])}<small>${esc(e[1])}</small></span></a>`).join('')+(rowsH.length>80?`<p class="small center">只顯示前 80 句，用上面的搜尋找找看 🔍</p>`:'') : `<p class="lead center">${SPQ.all?'找不到這句耶':'還沒有學過的句子，先學一課，或按「全部」看看 😊'}</p>`; };
+  draw(); document.getElementById('sq').oninput=e=>{ SPQ.q=e.target.value; draw(); };
+  app.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{ SPQ.all=b.dataset.f==='1'; app.querySelectorAll('.chip').forEach(x=>x.classList.toggle('on',x===b)); draw(); }); }
+function splitDetail(i){ const e=D.chunked[i], cs=e[3].map(fromRow), en=e[0];
+  page('course', `<a class="back" href="#/splitter">‹ 回到清單</a><h1 class="uh">${esc(en)}</h1><p class="small center">${esc(e[2])}</p>
+   <div class="card ucard"><div class="slash">${cs.map(x=>`<span class="k k-${x.r}">${esc(x.t)}</span>`).join('<em> / </em>')}</div><div class="ublks big">${cs.map((x,j)=>blkHTML(x,{gl:1,tag:1,attr:'data-ci="'+j+'"'})).join('')}</div><div class="uzh">${esc(e[1])}</div>
+   <div class="row-c"><button class="btn sound" data-say="${esc(en)}">🔊 整句</button><button class="btn sound slow" data-say="${esc(en)}" data-rate="0.55">🐢 慢慢聽</button><button class="btn sound" id="byb">🔊 一塊一塊</button></div></div>
+   <div class="card ucard legend"><b>顏色說明</b><div class="ublks"><span class="blk k-S"><b>主語</b><i>誰</i></span><span class="blk k-V"><b>動詞</b><i>做什麼</i></span><span class="blk k-O"><b>受詞</b><i>什麼</i></span><span class="blk k-P"><b>其他</b><i>哪裡／時間／樣子／問句字</i></span></div></div>
+   <div class="actions"><button class="btn soft" id="pv">‹ 上一句</button><button class="btn primary" id="nxs">下一句 ›</button></div>`);
+  const bl=[...app.querySelectorAll('.ublks.big .blk')]; let tk=0; const mark=j=>bl.forEach((b,k)=>b.classList.toggle('now',k===j));
+  bl.forEach((b,j)=>b.onclick=()=>{ tk++; mark(j); speak(cs[j].t,{rate:0.7,onend:()=>mark(-1)}); });
+  document.getElementById('byb').onclick=()=>{ unlock(); const my=++tk; let j=0; const st=()=>{ if(my!==tk||!document.getElementById('byb')) return; if(j>=cs.length){ mark(-1); return; } mark(j); speak(cs[j].t,{rate:0.7,onend:()=>{ j++; setTimeout(st,350); }}); }; st(); };
+  const L=learnedEn(), CH=D.chunked, step=d=>{ let k=i; do{ k=(k+d+CH.length)%CH.length; }while(!SPQ.all && !L.has(CH[k][0]) && k!==i); go('splitter/'+k); };
+  document.getElementById('pv').onclick=()=>step(-1); document.getElementById('nxs').onclick=()=>step(1); }
+
 /* ---------- 啟動 ---------- */
 window.addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); window.__BIP=e; if(route().v==='settings') render(); });
-window.__APP = {LESSONS, ITEMS, STAGES, scenes:()=>path().map(n=>({id:n.id, title:n.title, kind:n.L?n.L.kind:'blend', s:sceneOf(n).s}))};
+window.__APP = {LESSONS, ITEMS, STAGES, SPLIT:()=>D.chunked, scenes:()=>path().map(n=>({id:n.id, title:n.title, kind:n.U?'unit':n.L?n.L.kind:'blend', s:sceneOf(n).s}))};
 render();
 if('serviceWorker' in navigator && /^https?:/.test(location.protocol) && !window.INLINE_BUILD){ window.addEventListener('load', ()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
   const had=!!navigator.serviceWorker.controller; let reloaded=false; navigator.serviceWorker.addEventListener('controllerchange', ()=>{ if(had && !reloaded){ reloaded=true; location.reload(); } }); }
